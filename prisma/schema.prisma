@@ -136,13 +136,14 @@ enum DailyReportStatus {
 // ---------------------------------------------------------------------------
 
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  name      String
-  role      UserRole
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(uuid())
+  email        String   @unique
+  name         String
+  role         UserRole
+  passwordHash String?  // bcrypt hash for credentials auth; null if using OAuth only
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   eventDatesAssigned   EventDate[]   @relation("EventDateAssignedBuyer")
   ordersAssigned       Order[]       @relation("OrderAssignedBuyer")

@@ -1,27 +1,32 @@
+import { hash } from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
 async function main() {
-  // Users: one admin, one fulfillment
+  const devPasswordHash = await hash('password', 10);
+
+  // Users: one admin, one fulfillment (dev password "password" for local login)
   const admin = await prisma.user.upsert({
     where: { email: 'admin@example.com' },
-    update: {},
+    update: { passwordHash: devPasswordHash },
     create: {
       email: 'admin@example.com',
       name: 'Admin User',
       role: 'ADMIN',
+      passwordHash: devPasswordHash,
       isActive: true
     }
   });
 
   const fulfillmentUser = await prisma.user.upsert({
     where: { email: 'fulfillment@example.com' },
-    update: {},
+    update: { passwordHash: devPasswordHash },
     create: {
       email: 'fulfillment@example.com',
       name: 'Fulfillment User',
       role: 'FULFILLMENT',
+      passwordHash: devPasswordHash,
       isActive: true
     }
   });

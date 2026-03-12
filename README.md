@@ -41,6 +41,13 @@ No business logic, admin features, checkout, payments, reporting, or fulfillment
 
 5. Visit `http://localhost:3000` to see the scaffold.
 
+### Admin (Phase 4)
+
+- **Login**: Go to `http://localhost:3000/admin/login`. Seeded users (after `npx prisma db seed`):
+  - **Admin**: `admin@example.com` / `password`
+  - **Fulfillment**: `fulfillment@example.com` / `password`
+- In development, a fallback secret is used if `NEXTAUTH_SECRET` is not set (so login works without `.env`). To silence NextAuth warnings and use a stable session, add to `.env`: `NEXTAUTH_SECRET` (min 32 chars) and `NEXTAUTH_URL=http://localhost:3000`. In production, set `NEXTAUTH_SECRET` (e.g. from Secret Manager).
+
 ### Environment Configuration
 
 - **Configuration is env-based only**; no runtime configuration is stored on disk.
