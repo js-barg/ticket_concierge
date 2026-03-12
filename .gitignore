@@ -1,0 +1,17 @@
+node_modules
+.next
+.turbo
+.vercel
+dist
+out
+coverage
+*.log
+.env
+.env.local
+.env.production
+pnpm-lock.yaml
+yarn.lock
+package-lock.json
+
+prisma/dev.db
+
