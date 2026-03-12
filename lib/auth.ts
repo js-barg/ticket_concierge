@@ -23,7 +23,6 @@ if (process.env.NODE_ENV === 'development' && !process.env.NEXTAUTH_SECRET) {
 
 export const authOptions: NextAuthOptions = {
   secret: NEXTAUTH_SECRET,
-  trustHost: true,
   session: { strategy: 'jwt', maxAge: 24 * 60 * 60 },
   pages: { signIn: '/admin/login' },
   providers: [
@@ -96,4 +95,14 @@ export function requireAdminRole(
   sessionUser: { role?: unknown } | null
 ): sessionUser is { id: string; email: string; name: string; role: AdminRole } {
   return !!sessionUser && isAdminRole(sessionUser.role);
+}
+
+/**
+ * Require ADMIN role for mutations (create/update/delete) of event config.
+ * FULFILLMENT and FINANCE are read-only for events, dates, zones.
+ */
+export function requireAdminMutation(
+  sessionUser: { role?: unknown } | null
+): sessionUser is { id: string; email: string; name: string; role: 'ADMIN' } {
+  return !!sessionUser && (sessionUser as { role?: string }).role === 'ADMIN';
 }
