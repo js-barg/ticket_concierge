@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import type { ParentEventPageData, ValidEventDate } from '../../../lib/events';
+import type { ParentEventPageData, ValidEventDate, ZoneOption } from '../../../lib/events';
 
 function formatPerformanceAt(iso: string, tz: string): string {
   const d = new Date(iso);
@@ -28,6 +28,16 @@ export function EventPageClient({
   defaultSelectedDateId: string | null;
 }) {
   const [selectedDateId, setSelectedDateId] = useState<string | null>(defaultSelectedDateId);
+  const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
+  const [quantity, setQuantity] = useState<number>(1);
+  const [quote, setQuote] = useState<{
+    total: number;
+    perTicket: number;
+    serviceFee: number;
+    subtotal: number;
+  } | null>(null);
+  const [quoteError, setQuoteError] = useState<string | null>(null);
+  const [quoteLoading, setQuoteLoading] = useState(false);
   const [seatingMapError, setSeatingMapError] = useState(false);
 
   const selectedDate: ValidEventDate | undefined = useMemo(
@@ -37,7 +47,113 @@ export function EventPageClient({
 
   useEffect(() => {
     setSeatingMapError(false);
+    setSelectedZoneId(null);
+    setQuote(null);
+    setQuoteError(null);
   }, [selectedDateId]);
+
+  useEffect(() => {
+    if (!selectedDate || !selectedZoneId || quantity <= 0) {
+      setQuote(null);
+      setQuoteError(null);
+      return;
+    }
+    const zone = selectedDate.zones.find((z) => z.id === selectedZoneId);
+    if (!zone) {
+      setQuote(null);
+      setQuoteError(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    const fetchQuote = async () => {
+      try {
+        setQuoteLoading(true);
+        setQuoteError(null);
+        const res = await fetch('/api/quote', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            eventDateId: selectedDate.id,
+            zoneId: selectedZoneId,
+            quantity
+          }),
+          signal: controller.signal
+        });
+        const json = await res.json();
+        if (!res.ok || !json.ok) {
+          setQuote(null);
+          setQuoteError(json.error ?? 'Unable to calculate price.');
+          return;
+        }
+        const q = json.quote as {
+          pricing: {
+            perTicketPublicPrice: number;
+            serviceFeeAmountTotal: number;
+            subtotal: number;
+            total: number;
+          };
+        };
+        setQuote({
+          perTicket: q.pricing.perTicketPublicPrice,
+          serviceFee: q.pricing.serviceFeeAmountTotal,
+          subtotal: q.pricing.subtotal,
+          total: q.pricing.total
+        });
+      } catch (err) {
+        if ((err as any).name === 'AbortError') return;
+        setQuote(null);
+        setQuoteError('Unable to calculate price.');
+      } finally {
+        setQuoteLoading(false);
+      }
+    };
+    void fetchQuote();
+    return () => controller.abort();
+  }, [selectedDate, selectedZoneId, quantity]);
+
+  async function handleCheckout() {
+    if (!selectedDate || !selectedZoneId || !quote) return;
+    const nameInput = document.getElementById('checkout-name') as HTMLInputElement | null;
+    const emailInput = document.getElementById('checkout-email') as HTMLInputElement | null;
+    const phoneInput = document.getElementById('checkout-phone') as HTMLInputElement | null;
+
+    const customerName = nameInput?.value?.trim() ?? '';
+    const customerEmail = emailInput?.value?.trim() ?? '';
+    const customerPhone = phoneInput?.value?.trim();
+
+    if (!customerName || !customerEmail) {
+      setQuoteError('Please enter your name and email to continue.');
+      return;
+    }
+
+    setQuoteLoading(true);
+    setQuoteError(null);
+    try {
+      const res = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventDateId: selectedDate.id,
+          zoneId: selectedZoneId,
+          quantity,
+          customerName,
+          customerEmail,
+          customerPhone
+        })
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok || !json.url) {
+        setQuoteError(json.error ?? 'Unable to start checkout.');
+        return;
+      }
+      window.location.href = json.url as string;
+    } catch (err) {
+      setQuoteError('Unable to start checkout.');
+    } finally {
+      setQuoteLoading(false);
+    }
+  }
 
   if (data.validDates.length === 0) {
     return (
@@ -108,7 +224,12 @@ export function EventPageClient({
           {selectedDate?.zones.map((z) => (
             <div
               key={z.id}
-              className="flex flex-col gap-1 rounded-lg border border-slate-700 bg-slate-800/50 p-4"
+              className={`flex flex-col gap-1 rounded-lg border p-4 ${
+                selectedZoneId === z.id
+                  ? 'border-slate-400 bg-slate-700'
+                  : 'border-slate-700 bg-slate-800/50 hover:bg-slate-800'
+              }`}
+              onClick={() => setSelectedZoneId(z.id)}
             >
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -136,6 +257,93 @@ export function EventPageClient({
           ))}
         </div>
       </section>
+
+      {/* Quote and checkout */}
+      {selectedDate && selectedZoneId && (
+        <section className="space-y-4 rounded-lg border border-slate-700 bg-slate-800/40 p-4">
+          <h2 className="text-sm font-medium uppercase tracking-wide text-slate-400">
+            Your selection
+          </h2>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-3">
+              <div>
+                <label
+                  htmlFor="quantity"
+                  className="mb-1 block text-sm font-medium text-slate-300"
+                >
+                  Quantity
+                </label>
+                <input
+                  id="quantity"
+                  type="number"
+                  min={1}
+                  value={quantity}
+                  onChange={(e) => setQuantity(Math.max(1, Number(e.target.value) || 1))}
+                  className="w-24 rounded border border-slate-600 bg-slate-900 px-2 py-1 text-sm text-white focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-slate-300">Contact details</label>
+                <input
+                  id="checkout-name"
+                  type="text"
+                  placeholder="Full name"
+                  className="w-full rounded border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+                />
+                <input
+                  id="checkout-email"
+                  type="email"
+                  placeholder="Email"
+                  className="w-full rounded border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+                />
+                <input
+                  id="checkout-phone"
+                  type="tel"
+                  placeholder="Phone (optional)"
+                  className="w-full rounded border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2 text-sm">
+              <h3 className="font-medium text-slate-200">Price summary</h3>
+              {quote && (
+                <>
+                  <div className="flex justify-between text-slate-300">
+                    <span>
+                      Tickets ({quantity} × ${quote.perTicket.toFixed(2)})
+                    </span>
+                    <span>${quote.subtotal.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-300">
+                    <span>Service fees</span>
+                    <span>${quote.serviceFee.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between border-t border-slate-700 pt-2 text-slate-100">
+                    <span>Total</span>
+                    <span className="font-semibold">${quote.total.toFixed(2)}</span>
+                  </div>
+                  <p className="text-xs text-slate-500">Tax is currently 0 for this quote.</p>
+                </>
+              )}
+              {!quote && !quoteError && (
+                <p className="text-xs text-slate-500">
+                  Select a quantity to see live pricing for this zone.
+                </p>
+              )}
+              {quoteError && <p className="text-xs text-amber-400">{quoteError}</p>}
+              <button
+                type="button"
+                disabled={!quote || quoteLoading}
+                onClick={handleCheckout}
+                className="mt-3 inline-flex w-full items-center justify-center rounded bg-slate-50 px-4 py-2 text-sm font-medium text-slate-900 hover:bg-white disabled:opacity-60"
+              >
+                {quoteLoading ? 'Processing…' : 'Continue to checkout'}
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Disclosure */}
       {data.disclosureBlock && (

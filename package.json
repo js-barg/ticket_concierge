@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@prisma/client": "^6.19.2",
+    "stripe": "latest",
     "bcryptjs": "latest",
     "date-fns": "latest",
     "next-auth": "^4.24.10",
