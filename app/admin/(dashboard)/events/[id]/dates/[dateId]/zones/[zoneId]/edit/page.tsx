@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getServerSession, requireAdminMutation } from '@/lib/auth';
 import { prisma } from '@/lib/db';
-import { ZoneEditForm } from './ZoneEditForm';
+import { ZoneEditForm, type EditableZone } from './ZoneEditForm';
 import { deleteZoneForm } from '@/lib/actions/admin-events';
 
 type Props = { params: Promise<{ id: string; dateId: string; zoneId: string }> };
@@ -25,6 +25,29 @@ export default async function AdminZoneEditPage({ params }: Props) {
 
   if (!event || !eventDate || !zone) notFound();
 
+  const plainZone: EditableZone = {
+    id: zone.id,
+    eventDateId: zone.eventDateId,
+    zoneName: zone.zoneName,
+    customerDescription: zone.customerDescription,
+    displayOrder: zone.displayOrder,
+    mapRegionKey: zone.mapRegionKey,
+    sourceSectionMapping: zone.sourceSectionMapping ?? null,
+    sourceObservedCost: Number(zone.sourceObservedCost),
+    markupType: zone.markupType,
+    markupValue: zone.markupValue ? Number(zone.markupValue) : null,
+    marginBufferValue: zone.marginBufferValue ? Number(zone.marginBufferValue) : null,
+    serviceFeeType: zone.serviceFeeType,
+    serviceFeeValue: zone.serviceFeeValue ? Number(zone.serviceFeeValue) : null,
+    publicPrice: zone.publicPrice ? Number(zone.publicPrice) : null,
+    availableQuantity: zone.availableQuantity,
+    minPurchaseQty: zone.minPurchaseQty,
+    maxPurchaseQty: zone.maxPurchaseQty,
+    fulfillmentType: zone.fulfillmentType,
+    isActive: zone.isActive,
+    notes: zone.notes
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
@@ -44,7 +67,7 @@ export default async function AdminZoneEditPage({ params }: Props) {
         )}
       </div>
       {canMutate ? (
-        <ZoneEditForm eventId={eventId} dateId={dateId} zoneId={zoneId} zone={zone} />
+        <ZoneEditForm eventId={eventId} dateId={dateId} zoneId={zoneId} zone={plainZone} />
       ) : (
         <dl className="grid gap-2 text-sm">
           <div><dt className="text-slate-500">Zone name</dt><dd className="text-white">{zone.zoneName}</dd></div>

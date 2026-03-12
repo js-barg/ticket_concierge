@@ -2,12 +2,37 @@
 
 import { useFormState } from 'react-dom';
 import Link from 'next/link';
-import type { ParentEvent } from '@prisma/client';
 import { updateParentEvent } from '@/lib/actions/admin-events';
 import { AdminFormField, AdminFormTextarea, AdminFormSelect, AdminFormCheckbox } from '@/admin-components/AdminFormField';
 import { FormError } from '@/admin-components/FormError';
 
-export function ParentEventEditForm({ event }: { event: ParentEvent }) {
+export type EditableParentEvent = {
+  id: string;
+  title: string;
+  slug: string;
+  venueName: string;
+  category: string;
+  marketingHeadline: string | null;
+  subheadline: string | null;
+  eventDescription: string | null;
+  layoutTemplate: string;
+  primaryColor: string | null;
+  secondaryColor: string | null;
+  accentColor: string | null;
+  textTheme: string | null;
+  heroImageUrl: string | null;
+  mobileHeroImageUrl: string | null;
+  disclosureBlock: string | null;
+  defaultCutoffHours: number | null;
+  defaultMarkupType: 'PERCENT' | 'FLAT' | null;
+  defaultMarkupValue: number | null;
+  defaultMarginBuffer: number | null;
+  defaultServiceFeeType: 'PER_ORDER_FLAT' | 'PER_TICKET_FLAT' | 'PERCENT' | null;
+  defaultServiceFeeValue: number | null;
+  isActive: boolean;
+};
+
+export function ParentEventEditForm({ event }: { event: EditableParentEvent }) {
   const [state, formAction] = useFormState(
     (prev: { error: string | null } | null, fd: FormData) => updateParentEvent(event.id, prev, fd),
     { error: null }

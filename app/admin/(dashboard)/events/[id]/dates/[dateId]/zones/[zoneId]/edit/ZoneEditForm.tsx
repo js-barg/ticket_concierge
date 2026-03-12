@@ -2,10 +2,32 @@
 
 import { useFormState } from 'react-dom';
 import Link from 'next/link';
-import type { Zone } from '@prisma/client';
 import { updateZone } from '@/lib/actions/admin-events';
 import { AdminFormField, AdminFormTextarea, AdminFormSelect, AdminFormCheckbox } from '@/admin-components/AdminFormField';
 import { FormError } from '@/admin-components/FormError';
+
+export type EditableZone = {
+  id: string;
+  eventDateId: string;
+  zoneName: string;
+  customerDescription: string | null;
+  displayOrder: number;
+  mapRegionKey: string | null;
+  sourceSectionMapping: unknown | null;
+  sourceObservedCost: number;
+  markupType: 'INHERIT' | 'PERCENT' | 'FLAT';
+  markupValue: number | null;
+  marginBufferValue: number | null;
+  serviceFeeType: 'INHERIT' | 'PER_ORDER_FLAT' | 'PER_TICKET_FLAT' | 'PERCENT';
+  serviceFeeValue: number | null;
+  publicPrice: number | null;
+  availableQuantity: number;
+  minPurchaseQty: number;
+  maxPurchaseQty: number | null;
+  fulfillmentType: 'ETICKET' | 'PRINT' | 'WILL_CALL';
+  isActive: boolean;
+  notes: string | null;
+};
 
 export function ZoneEditForm({
   eventId,
@@ -16,7 +38,7 @@ export function ZoneEditForm({
   eventId: string;
   dateId: string;
   zoneId: string;
-  zone: Zone;
+  zone: EditableZone;
 }) {
   const [state, formAction] = useFormState(
     (prev: { error: string | null } | null, fd: FormData) => updateZone(eventId, dateId, zoneId, prev, fd),
