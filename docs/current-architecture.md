@@ -1,10 +1,12 @@
 # Current Architecture
 
 ## Current State
-- Repository initialized
-- PRD created
-- Cloud Run technical spec created
-- Engineering rules defined
+- Phase 1 scaffold complete
+- Next.js app created
+- Tailwind configured
+- Prisma configured
+- Docker Compose configured
+- Local Postgres running
 
 ## Stack Target
 - Next.js
@@ -17,9 +19,10 @@
 - Google Cloud Run
 
 ## Open Items
-- App scaffold not yet generated
-- Prisma schema not yet created
-- Local Docker setup not yet created
+- Domain schema not yet finalized
+- Seed data not yet created
+- Public event page not yet built
+- Admin auth not yet built
 
 ## Next Phase
-- Generate local-first Cloud Run-compatible scaffold
+- Implement Prisma schema and seed data

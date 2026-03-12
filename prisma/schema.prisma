@@ -1,3 +1,6 @@
+// Ticket Concierge — Phase 2 schema (aligned with technical-spec-cloud-run.md)
+// Business UI, checkout, admin CRUD, and reporting are not implemented yet.
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -7,8 +10,130 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Phase 1 foundation only: we define the core models but do not
-// yet implement any business logic, flows, or APIs that use them.
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum UserRole {
+  ADMIN
+  FULFILLMENT
+  FINANCE
+}
+
+enum MarkupType {
+  PERCENT
+  FLAT
+}
+
+enum ServiceFeeType {
+  PER_ORDER_FLAT
+  PER_TICKET_FLAT
+  PERCENT
+}
+
+enum EventVisibilityStatus {
+  VISIBLE
+  HIDDEN
+}
+
+enum EventSaleStatus {
+  DRAFT
+  LIVE
+  CUTOFF
+  SOLD_OUT
+  COMPLETED
+  ARCHIVED
+}
+
+enum AssetType {
+  SEATING_MAP
+  DOCUMENT
+  OTHER
+}
+
+enum ZoneMarkupType {
+  INHERIT
+  PERCENT
+  FLAT
+}
+
+enum ZoneServiceFeeType {
+  INHERIT
+  PER_ORDER_FLAT
+  PER_TICKET_FLAT
+  PERCENT
+}
+
+enum FulfillmentType {
+  ETICKET
+  PRINT
+  WILL_CALL
+}
+
+enum PaymentProvider {
+  STRIPE
+  PAYPAL
+  SQUARE
+}
+
+enum PaymentStatus {
+  PENDING
+  AUTHORIZED
+  PAID
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum FulfillmentStatus {
+  NEW
+  IN_PROGRESS
+  ACQUIRED
+  DELIVERED
+  EXCEPTION
+  CANCELLED
+}
+
+enum DeliveryStatus {
+  PENDING
+  SENT
+  DELIVERED
+  PICKUP_READY
+}
+
+enum RefundStatus {
+  NONE
+  REQUESTED
+  REFUNDED
+  PARTIAL
+}
+
+enum ExceptionStatus {
+  NONE
+  TOGETHER_UNAVAILABLE
+  PRICE_BREAK
+  ZONE_UNAVAILABLE
+  QTY_UNAVAILABLE
+  FULFILLMENT_MISMATCH
+  DELIVERY_ISSUE
+}
+
+enum NotificationDeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum DailyReportStatus {
+  PENDING
+  GENERATED
+  SENT
+  FAILED
+}
+
+// ---------------------------------------------------------------------------
+// Users
+// ---------------------------------------------------------------------------
 
 model User {
   id        String   @id @default(uuid())
@@ -18,11 +143,245 @@ model User {
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  eventDatesAssigned   EventDate[]   @relation("EventDateAssignedBuyer")
+  ordersAssigned       Order[]       @relation("OrderAssignedBuyer")
+  orderActivities      OrderActivity[]
+  dailyReportsReceived DailyReport[] @relation("DailyReportRecipient")
+
+  @@map("users")
 }
 
-enum UserRole {
-  ADMIN
-  FULFILLMENT
-  FINANCE
+
+// ---------------------------------------------------------------------------
+// Parent Events
+// ---------------------------------------------------------------------------
+
+model ParentEvent {
+  id                    String    @id @default(uuid())
+  slug                  String    @unique
+  title                 String
+  venueName             String
+  category              String
+  marketingHeadline     String?
+  subheadline           String?
+  eventDescription      String?
+  layoutTemplate        String
+  primaryColor          String?
+  secondaryColor        String?
+  accentColor           String?
+  textTheme             String?
+  heroImageUrl          String?
+  mobileHeroImageUrl    String?
+  disclosureBlock       String?
+  defaultCutoffHours    Int?
+  defaultMarkupType     MarkupType?
+  defaultMarkupValue    Decimal?  @db.Decimal(10, 2)
+  defaultMarginBuffer   Decimal?  @db.Decimal(10, 2)
+  defaultServiceFeeType ServiceFeeType?
+  defaultServiceFeeValue Decimal? @db.Decimal(10, 2)
+  isActive              Boolean   @default(true)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  images     ParentEventImage[]
+  eventDates EventDate[]
+  orders     Order[]
+
+  @@map("parent_events")
 }
 
+model ParentEventImage {
+  id            String   @id @default(uuid())
+  parentEventId String
+  imageUrl      String
+  sortOrder     Int      @default(0)
+  altText       String?
+  createdAt     DateTime @default(now())
+
+  parentEvent ParentEvent @relation(fields: [parentEventId], references: [id], onDelete: Cascade)
+
+  @@index([parentEventId])
+  @@map("parent_event_images")
+}
+
+// ---------------------------------------------------------------------------
+// Event Dates
+// ---------------------------------------------------------------------------
+
+model EventDate {
+  id                   String                 @id @default(uuid())
+  parentEventId        String
+  performanceAt        DateTime
+  timezone             String
+  visibilityStatus     EventVisibilityStatus  @default(VISIBLE)
+  saleStatus           EventSaleStatus       @default(DRAFT)
+  sellCutoffAt         DateTime
+  quantityCap          Int?
+  assignedBuyerUserId  String?
+  notes                String?
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+
+  parentEvent       ParentEvent   @relation(fields: [parentEventId], references: [id], onDelete: Cascade)
+  assignedBuyer     User?         @relation("EventDateAssignedBuyer", fields: [assignedBuyerUserId], references: [id], onDelete: SetNull)
+  assets            EventDateAsset[]
+  zones             Zone[]
+  orders            Order[]
+
+  @@index([parentEventId, performanceAt])
+  @@index([saleStatus, sellCutoffAt])
+  @@map("event_dates")
+}
+
+model EventDateAsset {
+  id          String    @id @default(uuid())
+  eventDateId String
+  assetType   AssetType
+  assetUrl    String
+  label       String?
+  createdAt   DateTime  @default(now())
+
+  eventDate EventDate @relation(fields: [eventDateId], references: [id], onDelete: Cascade)
+
+  @@index([eventDateId])
+  @@map("event_date_assets")
+}
+
+// ---------------------------------------------------------------------------
+// Zones
+// ---------------------------------------------------------------------------
+
+model Zone {
+  id                  String             @id @default(uuid())
+  eventDateId         String
+  zoneName            String
+  customerDescription String?
+  displayOrder        Int                @default(0)
+  mapRegionKey        String?
+  sourceSectionMapping Json?             @db.JsonB
+  sourceObservedCost  Decimal            @db.Decimal(10, 2)
+  markupType          ZoneMarkupType     @default(INHERIT)
+  markupValue         Decimal?           @db.Decimal(10, 2)
+  marginBufferValue   Decimal?           @db.Decimal(10, 2)
+  serviceFeeType      ZoneServiceFeeType @default(INHERIT)
+  serviceFeeValue     Decimal?           @db.Decimal(10, 2)
+  publicPrice         Decimal?           @db.Decimal(10, 2)
+  availableQuantity   Int
+  minPurchaseQty      Int                @default(1)
+  maxPurchaseQty      Int?
+  fulfillmentType     FulfillmentType
+  isActive            Boolean            @default(true)
+  notes               String?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  eventDate EventDate @relation(fields: [eventDateId], references: [id], onDelete: Cascade)
+  orders    Order[]
+
+  @@index([eventDateId, isActive, displayOrder])
+  @@map("zones")
+}
+
+// ---------------------------------------------------------------------------
+// Orders
+// ---------------------------------------------------------------------------
+
+model Order {
+  id                        String             @id @default(uuid())
+  orderNumber               String             @unique
+  parentEventId             String
+  eventDateId               String
+  zoneId                    String
+  customerName              String
+  customerEmail             String
+  customerPhone             String?
+  quantity                  Int
+  seatsTogetherExpected    Boolean            @default(true)
+  fulfillmentType           FulfillmentType
+  sourceCostEstimateTotal   Decimal            @db.Decimal(10, 2)
+  markupAmountTotal         Decimal            @db.Decimal(10, 2)
+  marginBufferAmountTotal   Decimal            @db.Decimal(10, 2)
+  serviceFeeAmountTotal     Decimal            @db.Decimal(10, 2)
+  subtotalAmount            Decimal            @db.Decimal(10, 2)
+  taxAmount                 Decimal            @db.Decimal(10, 2) @default(0)
+  totalAmount               Decimal            @db.Decimal(10, 2)
+  paymentProvider           PaymentProvider
+  paymentStatus             PaymentStatus
+  fulfillmentStatus         FulfillmentStatus
+  deliveryStatus            DeliveryStatus     @default(PENDING)
+  refundStatus              RefundStatus        @default(NONE)
+  assignedBuyerUserId       String?
+  exceptionStatus           ExceptionStatus    @default(NONE)
+  internalNotes             String?
+  createdAt                 DateTime           @default(now())
+  updatedAt                 DateTime           @updatedAt
+
+  parentEvent     ParentEvent @relation(fields: [parentEventId], references: [id], onDelete: Restrict)
+  eventDate       EventDate   @relation(fields: [eventDateId], references: [id], onDelete: Restrict)
+  zone            Zone        @relation(fields: [zoneId], references: [id], onDelete: Restrict)
+  assignedBuyer   User?       @relation("OrderAssignedBuyer", fields: [assignedBuyerUserId], references: [id], onDelete: SetNull)
+  orderActivities OrderActivity[]
+  notifications   Notification[]
+
+  @@index([fulfillmentStatus, createdAt])
+  @@index([assignedBuyerUserId, fulfillmentStatus])
+  @@index([eventDateId])
+  @@map("orders")
+}
+
+model OrderActivity {
+  id           String   @id @default(uuid())
+  orderId      String
+  actorUserId  String?
+  activityType String
+  details      Json?    @db.JsonB
+  createdAt    DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  actor User? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+  @@map("order_activity")
+}
+
+// ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
+
+model Notification {
+  id                String                    @id @default(uuid())
+  orderId           String?
+  recipientEmail    String
+  notificationType  String
+  deliveryStatus    NotificationDeliveryStatus @default(PENDING)
+  providerMessageId String?
+  payload           Json?                      @db.JsonB
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+
+  order Order? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+  @@map("notifications")
+}
+
+// ---------------------------------------------------------------------------
+// Daily Reports
+// ---------------------------------------------------------------------------
+
+model DailyReport {
+  id               String            @id @default(uuid())
+  reportDate       DateTime         @db.Date
+  recipientUserId  String?
+  recipientEmail   String
+  fileUrl          String?
+  status           DailyReportStatus
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  recipientUser User? @relation("DailyReportRecipient", fields: [recipientUserId], references: [id], onDelete: SetNull)
+
+  @@index([reportDate])
+  @@map("daily_reports")
+}
