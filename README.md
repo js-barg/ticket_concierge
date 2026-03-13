@@ -1,100 +1,168 @@
-## Ticket Concierge — Ticket Concierge MVP
+## Ticket Concierge — MVP
 
-This repository contains the **Phase 1 foundation** for the Ticket Concierge platform: a local-first, Google Cloud Run–compatible scaffold using **Next.js**, **TypeScript**, **Tailwind CSS**, **Prisma**, **PostgreSQL**, and **Docker**.
-
-No business logic, admin features, checkout, payments, reporting, or fulfillment flows are implemented yet.
+A single repository supports **local development** and **production on Google Cloud Run** with the same codebase. No product or business-rule changes between environments; only configuration (env vars and database) differs.
 
 ### Stack
 
-- **App**: Next.js (App Router), React, TypeScript
-- **Styling**: Tailwind CSS
+- **App**: Next.js (App Router), React, TypeScript, Tailwind CSS
 - **ORM**: Prisma
-- **Database**: PostgreSQL (via Docker in local dev)
+- **Database**: PostgreSQL (Docker Compose locally; Cloud SQL in production)
 - **Runtime**: Node.js, Docker, Cloud Run–ready container
 
-### Getting Started (Local)
+---
 
-1. Install dependencies:
+## Local development
+
+1. **Install dependencies**
 
    ```bash
    npm install
    ```
 
-2. Create a `.env` file based on `.env.example`:
+2. **Environment**
 
    ```bash
    cp .env.example .env
    ```
 
-3. Start Postgres and the app via Docker Compose:
+   Edit `.env`: set `DATABASE_URL` to `postgres://postgres:postgres@db:5432/ticket_concierge` when using Docker Compose, or `@localhost:5432/...` if Postgres runs on the host.
+
+3. **Start Postgres and app**
 
    ```bash
    docker compose up --build
    ```
 
-4. In another terminal, run Prisma migrations and seed:
+4. **Migrations and seed** (in another terminal)
 
    ```bash
    npx prisma migrate dev --name init
    npx prisma db seed
    ```
 
-5. Visit `http://localhost:3000` to see the scaffold.
+5. Open **http://localhost:3000**. Admin: **http://localhost:3000/admin/login** — after seed: `admin@example.com` / `password`, `fulfillment@example.com` / `password`.
 
-### Admin (Phase 4–8)
+### Local Prisma
 
-- **Login**: Go to `http://localhost:3000/admin/login`. Seeded users (after `npx prisma db seed`):
-  - **Admin**: `admin@example.com` / `password`
-  - **Fulfillment**: `fulfillment@example.com` / `password`
-- In development, a fallback secret is used if `NEXTAUTH_SECRET` is not set (so login works without `.env`). To silence NextAuth warnings and use a stable session, add to `.env`: `NEXTAUTH_SECRET` (min 32 chars) and `NEXTAUTH_URL=http://localhost:3000`. In production, set `NEXTAUTH_SECRET` (e.g. from Secret Manager).
+- Develop: `npx prisma migrate dev`
+- Studio: `npx prisma studio`
 
-### Reporting (Phase 9)
+### Local Stripe testing
 
-- Go to `/admin/reports` (admin role required).
-- Choose a report date and click **Generate** to create a daily report record.
-- Recent reports will appear in the table with a **Download CSV** link, which returns a server-generated CSV of orders for that day.
+- Use test keys in `.env` (`sk_test_...`, `whsec_...`, `pk_test_...`).
+- Use Stripe CLI to forward webhooks: `stripe listen --forward-to localhost:3000/api/stripe/webhook`.
 
-### Environment Configuration
+---
 
-- **Configuration is env-based only**; no runtime configuration is stored on disk.
-- `.env.example` documents the required environment variables for local development.
-- Cloud Run will inject `PORT` and other secrets via environment variables / Secret Manager in later phases.
+## Production deployment (Cloud Run)
 
-### Docker / Cloud Run Compatibility
+The app runs on **Google Cloud Run** with **Cloud SQL (PostgreSQL)**. Deployment is triggered from **GitHub** via **Cloud Build**. The same repo and Dockerfile are used; only environment variables and the database URL change.
 
-- `Dockerfile` builds a standalone Next.js app suitable for Cloud Run.
-- The app is **stateless**; all persistent data is expected to live in PostgreSQL (or other external services such as Stripe, email, and storage).
-- The app reads the `PORT` environment variable (set automatically by Cloud Run) via Next.js; no hard-coded port assumptions remain.
+### Build production container locally (optional)
 
-### Cloud Run / Scheduler Notes (Phase 9)
+```bash
+./scripts/build-container.sh
+# Run it locally (needs a reachable DB and .env):
+./scripts/run-production-local.sh 3000
+```
 
-- Core scheduled-job logic is implemented as reusable functions in:
-  - `lib/reports.ts` — `generateDailyReport` and CSV helpers.
-  - `lib/sweeps.ts` — `sweepEventDateCutoffs`, `sweepCompletedEvents`, `retryFailedNotifications`.
-- For future Cloud Scheduler / Cloud Run Jobs integration you can:
-  - Call `/api/reports/daily` (POST) to generate a report for a given date.
-  - Call `/api/sweeps` (POST) to run cutoff/completion sweeps and the notification retry placeholder.
-- These endpoints enforce server-side auth and are suitable for securing behind an internal-only Cloud Run service or IAM-protected invocation.
+### Environment variables (production)
 
-### Prisma
+Set these on the Cloud Run service (or via Secret Manager). Do **not** commit real values.
 
-- Prisma is configured to use PostgreSQL with `DATABASE_URL`.
-- Phase 1 defines only a minimal `User` model to keep the ORM pipeline wired.
-- Use standard Prisma workflows:
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `NODE_ENV` | Yes | `production` |
+| `PORT` | No | Set by Cloud Run; default 3000 |
+| `DATABASE_URL` | Yes | Cloud SQL connection string (e.g. Unix socket or private IP) |
+| `NEXTAUTH_SECRET` | Yes | Session secret (min 32 chars); use Secret Manager |
+| `NEXTAUTH_URL` | Yes | Full app URL (e.g. `https://your-service-xxx.run.app`) |
+| `APP_BASE_URL` | Yes | Same as `NEXTAUTH_URL` for callbacks and links |
+| `STRIPE_SECRET_KEY` | Yes | Stripe secret key (live in prod) |
+| `STRIPE_WEBHOOK_SECRET` | Yes | Stripe webhook signing secret |
+| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Yes | Stripe publishable key |
+| `FROM_EMAIL` | No | Sender for email (when provider is configured) |
+| `RESEND_API_KEY` | No | Or other email provider when implemented |
+
+See `.env.production.example` for a full checklist. Optional: `DIRECT_DATABASE_URL` for migrations if you use a pooler for the app.
+
+### Prisma migrations in production
+
+Migrations are **not** run inside the app container. Run them when the schema changes:
+
+- **Option A**: From a machine with network access to Cloud SQL (or Cloud SQL Proxy):
 
   ```bash
-  npx prisma migrate dev
-  npx prisma studio
+  export DATABASE_URL="postgresql://..."
+  npx prisma migrate deploy
   ```
 
-### Phase 1 Scope
+- **Option B**: Add a Cloud Build step that runs a one-off migration container or `gcloud run jobs` with `prisma migrate deploy`.
+- **Option C**: Run a one-off Cloud Run Job that executes `prisma migrate deploy`.
 
-This foundation intentionally **does not** include:
+Use the same `DATABASE_URL` (or `DIRECT_DATABASE_URL` if you use pooling) that points to your Cloud SQL instance.
 
-- Event, zone, or order models beyond the minimal user scaffold
-- Admin CRUD UI
-- Checkout or payment processing
-- Reporting or fulfillment workflows
+### GitHub → Cloud Build → Cloud Run
 
-Those will be layered on in later phases once the foundation is validated.
+1. **Repo**: Push to `main` (or your chosen branch).
+2. **Cloud Build**: Trigger runs `cloudbuild.yaml` — builds the Docker image, pushes to Artifact Registry, deploys to Cloud Run.
+3. **Cloud Run**: New revision uses the new image; env vars and secrets are already configured on the service.
+
+Substitutions in `cloudbuild.yaml` (override in the trigger if needed):
+
+- `_REGION` — e.g. `us-central1`
+- `_SERVICE_NAME` — Cloud Run service name (e.g. `ticket-concierge-web`)
+- `_ARTIFACT_REPO` — Artifact Registry repository name (e.g. `ticket-concierge`)
+
+---
+
+## What to configure in Google Cloud
+
+1. **Project**: Create or select a GCP project; enable billing if needed.
+2. **APIs**: Enable **Cloud Run**, **Artifact Registry**, **Cloud Build**, **Secret Manager**, **Cloud SQL Admin** (and **Cloud SQL** if using Cloud SQL).
+3. **Artifact Registry**: Create a repository (e.g. `ticket-concierge`) in your chosen region.
+4. **Cloud SQL**: Create a PostgreSQL instance and database (e.g. `ticket_concierge`). Note the connection name and set `DATABASE_URL` (and optionally `DIRECT_DATABASE_URL`) for Cloud Run and for migration runs.
+5. **Secret Manager**: Create secrets for `NEXTAUTH_SECRET`, `DATABASE_URL`, Stripe keys, etc. Optionally reference them in Cloud Run (e.g. “Secret Manager” tab when editing the service).
+6. **Cloud Run service**: Create the service (or let the first deploy create it). Configure all required environment variables and/or secret references. Set the service account so it can reach Cloud SQL and Secret Manager if needed.
+7. **Cloud Build**: Connect the GitHub repo; create a trigger that runs on push to `main`, uses this repo’s `cloudbuild.yaml`, and uses the default or overridden substitutions.
+
+---
+
+## What to configure in GitHub / Cloud Build trigger
+
+1. **GitHub**: Repository is the source of truth; no secrets in the repo.
+2. **Cloud Build trigger**:  
+   - **Event**: Push to branch (e.g. `main`).  
+   - **Source**: Connected GitHub repo; branch `main` (or your default).  
+   - **Config**: Cloud Build config file; path `cloudbuild.yaml`.  
+   - **Substitutions**: Optionally set `_REGION`, `_SERVICE_NAME`, `_ARTIFACT_REPO` if you don’t use the defaults in `cloudbuild.yaml`.
+3. **Permissions**: Cloud Build’s service account needs roles to push to Artifact Registry and deploy to Cloud Run (and read secrets if you inject them in the build).
+
+---
+
+## Reporting and scheduled tasks (Phase 9)
+
+- **Reports**: `/admin/reports` — generate daily reports, date-range export, unfulfilled-orders CSV.
+- **Scheduled logic**: `lib/reports.ts`, `lib/sweeps.ts` — report generation, cutoff/completion sweeps, notification retry placeholder. For production, call `/api/reports/daily` (POST) or `/api/sweeps` (POST) from **Cloud Scheduler** or a **Cloud Run Job** (with auth/IAM as appropriate).
+
+---
+
+## Files reference
+
+| Path | Purpose |
+|------|---------|
+| `Dockerfile` | Production app image (Cloud Run); not used for local dev app process |
+| `docker-compose.yml` | Local Postgres + app dev server |
+| `cloudbuild.yaml` | Build image, push to Artifact Registry, deploy to Cloud Run |
+| `.dockerignore` | Keeps `.env` and unneeded files out of the image |
+| `.env.example` | Local dev env template |
+| `.env.production.example` | Production env checklist (no real secrets) |
+| `scripts/build-container.sh` | Build production image locally |
+| `scripts/run-production-local.sh` | Run production image locally |
+| `scripts/README.md` | Script and migration notes |
+
+### Stateless design
+
+- The app does **not** persist data on the container filesystem. All persistent data is in PostgreSQL (or Stripe, etc.).
+- Storage and email are abstracted so you can plug in Google Cloud Storage and an email provider later without changing business logic.
 

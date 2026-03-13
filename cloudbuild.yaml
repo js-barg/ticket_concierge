@@ -1,0 +1,61 @@
+# Ticket Concierge — Cloud Build: build image, push to Artifact Registry, deploy to Cloud Run.
+# Trigger from GitHub (e.g. on push to main). Set substitutions in the Cloud Build trigger.
+#
+# Required substitutions (set in trigger or default below):
+#   _REGION          — e.g. us-central1
+#   _SERVICE_NAME   — Cloud Run service name, e.g. ticket-concierge-web
+#   _ARTIFACT_REPO  — Artifact Registry repo name, e.g. ticket-concierge
+#
+# Secrets (DATABASE_URL, NEXTAUTH_SECRET, etc.) are configured on the Cloud Run service,
+# not in this file. Use Secret Manager or Cloud Run env vars in the console/CLI.
+
+substitutions:
+  _REGION: us-central1
+  _SERVICE_NAME: ticket-concierge-web
+  _ARTIFACT_REPO: ticket-concierge
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+steps:
+  # Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    id: build
+    args:
+      - 'build'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REPO}/app:${SHORT_SHA}'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REPO}/app:latest'
+      - '.'
+    dir: '.'
+
+  # Push to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    id: push
+    args:
+      - 'push'
+      - '--all-tags'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REPO}/app'
+    waitFor: ['build']
+
+  # Deploy to Cloud Run (env vars and secrets are set on the service; this only deploys the new revision)
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: deploy
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - '${_SERVICE_NAME}'
+      - '--image'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REPO}/app:${SHORT_SHA}'
+      - '--region'
+      - '${_REGION}'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+    waitFor: ['push']
+
+images:
+  - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REPO}/app:${SHORT_SHA}'
+  - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REPO}/app:latest'

@@ -1,0 +1,31 @@
+# Dependencies and build outputs
+node_modules
+.next
+out
+
+# Environment and secrets (never bake into image)
+.env
+.env.*
+!.env.example
+!.env.production.example
+
+# Git and IDE
+.git
+.gitignore
+.dockerignore
+*.md
+!README.md
+
+# Debug and test
+coverage
+.nyc_output
+*.log
+npm-debug.log*
+
+# Local development
+docker-compose*.yml
+.docker
+
+# Misc
+.DS_Store
+*.pem
