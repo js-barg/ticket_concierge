@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { getServerSession, requireAdminRole } from '../../../lib/auth';
+import { getServerSession, requireAdminRole } from '@/lib/auth';
 
 const nav = [
   { href: '/admin', label: 'Dashboard' },
