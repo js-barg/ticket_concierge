@@ -51,6 +51,16 @@ type OrderWithRelations = Awaited<
   ReturnType<typeof prisma.order.findMany<{ include: typeof orderInclude }>>
 >[number];
 
+/** Deduplicate by orderNumber (keep first by createdAt) so legacy duplicate rows show once. */
+function dedupeByOrderNumber<T extends { orderNumber: string; createdAt: Date }>(items: T[]): T[] {
+  const seen = new Set<string>();
+  return items.filter((o) => {
+    if (seen.has(o.orderNumber)) return false;
+    seen.add(o.orderNumber);
+    return true;
+  });
+}
+
 function mapOrdersToRows(orders: OrderWithRelations[]): GeneratedReportRow[] {
   return orders.map((o) => ({
     orderNumber: o.orderNumber,
@@ -99,7 +109,8 @@ export async function getReportDataForDate(
     include: orderInclude,
     orderBy: { createdAt: 'asc' }
   });
-  return { reportDate: start, rows: mapOrdersToRows(orders) };
+  const deduped = dedupeByOrderNumber(orders);
+  return { reportDate: start, rows: mapOrdersToRows(deduped) };
 }
 
 /**
@@ -119,7 +130,8 @@ export async function getReportDataForDateRange(
     include: orderInclude,
     orderBy: { createdAt: 'asc' }
   });
-  return { rows: mapOrdersToRows(orders) };
+  const deduped = dedupeByOrderNumber(orders);
+  return { rows: mapOrdersToRows(deduped) };
 }
 
 /**
@@ -138,7 +150,8 @@ export async function getReportDataForUnfulfilled(): Promise<{
     include: orderInclude,
     orderBy: { createdAt: 'asc' }
   });
-  return { rows: mapOrdersToRows(orders) };
+  const deduped = dedupeByOrderNumber(orders);
+  return { rows: mapOrdersToRows(deduped) };
 }
 
 export async function generateDailyReport(

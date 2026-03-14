@@ -186,7 +186,7 @@ After the first deploy you’ll get a URL like `https://ticket-concierge-web-xxx
 export CLOUD_RUN_URL="https://ticket-concierge-web-xxxxx-uc.a.run.app"
 ```
 
-**7b. Deploy with Cloud SQL and secrets**
+**7b. Deploy with Cloud SQL, secrets, and Stripe publishable key**
 
 ```bash
 gcloud run deploy "$SERVICE" \
@@ -196,25 +196,11 @@ gcloud run deploy "$SERVICE" \
   --allow-unauthenticated \
   --service-account "$SA_EMAIL" \
   --add-cloudsql-instances "$INSTANCE_CONNECTION_NAME" \
-  --set-env-vars "NODE_ENV=production,APP_BASE_URL=${CLOUD_RUN_URL},NEXTAUTH_URL=${CLOUD_RUN_URL}" \
+  --set-env-vars "NODE_ENV=production,APP_BASE_URL=${CLOUD_RUN_URL},NEXTAUTH_URL=${CLOUD_RUN_URL},NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_51TAD6bPx1KdJH8yS6T49XZor5LIxmJPgtlR8Gn5ILvcas2kgBV1u2HOqCV9mEl5DVdFdH1GDdW1JlMWQ0JYL9rKo006sQJX3Sr" \
   --set-secrets "DATABASE_URL=DATABASE_URL:latest,NEXTAUTH_SECRET=NEXTAUTH_SECRET:latest,STRIPE_SECRET_KEY=STRIPE_SECRET_KEY:latest,STRIPE_WEBHOOK_SECRET=STRIPE_WEBHOOK_SECRET:latest"
 ```
 
-**Public Stripe key** (non-secret; set as env var):
-
-If you need `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, add it to the same deploy:
-
-```bash
-gcloud run deploy "$SERVICE" \
-  --image "${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${SERVICE}:latest" \
-  --region "$REGION" \
-  --platform managed \
-  --allow-unauthenticated \
-  --service-account "$SA_EMAIL" \
-  --add-cloudsql-instances "$INSTANCE_CONNECTION_NAME" \
-  --set-env-vars "NODE_ENV=production,APP_BASE_URL=${CLOUD_RUN_URL},NEXTAUTH_URL=${CLOUD_RUN_URL},NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_xxxx" \
-  --set-secrets "DATABASE_URL=DATABASE_URL:latest,NEXTAUTH_SECRET=NEXTAUTH_SECRET:latest,STRIPE_SECRET_KEY=STRIPE_SECRET_KEY:latest,STRIPE_WEBHOOK_SECRET=STRIPE_WEBHOOK_SECRET:latest"
-```
+(Use `pk_live_...` in production; replace with your live publishable key when you switch.)
 
 **7c. Get the real URL and update env vars**
 
@@ -230,24 +216,49 @@ Set that URL as `CLOUD_RUN_URL`, then run the same `gcloud run deploy` command a
 
 ## Step 8: Run database migrations
 
-The app does **not** run migrations automatically. Run them once (or after schema changes) from a place that can reach Cloud SQL.
+The app does **not** run migrations automatically. If you see **The table `public.parent_events` does not exist**, the database has no schema yet. Run migrations (and optionally seed) once.
 
-**Option A: Cloud SQL Auth Proxy on your machine**
+**Option A: From Google Cloud Shell** (e.g. you’re already in `~/ticket_concierge`)
+
+1. Set your project and get the instance connection name:
+   ```bash
+   gcloud config set project ticket-concierge-490215
+   export INSTANCE_CONNECTION_NAME=$(gcloud sql instances describe ticket-concierge-db --format='value(connectionName)')
+   echo $INSTANCE_CONNECTION_NAME
+   ```
+
+2. Start the Cloud SQL Auth Proxy in the **background** (Cloud Shell has it preinstalled):
+   ```bash
+   cloud-sql-proxy --port=5432 "$INSTANCE_CONNECTION_NAME" &
+   sleep 3
+   ```
+
+3. Set `DATABASE_URL` to connect through the proxy (use the same user, password, and database as in your Cloud Run secret):
+   ```bash
+   export DB_USER=ticket_concierge_app
+   export DB_PASSWORD='YourActualPassword'
+   export DB_NAME=ticket_concierge
+   export DATABASE_URL="postgresql://${DB_USER}:${DB_PASSWORD}@127.0.0.1:5432/${DB_NAME}"
+   ```
+
+4. From the repo root (e.g. `~/ticket_concierge`), run migrations and seed:
+   ```bash
+   cd ~/ticket_concierge   # or wherever the repo is
+   npm install            # if you haven’t already
+   npx prisma migrate deploy
+   npx prisma db seed
+   ```
+
+5. Stop the proxy when done:
+   ```bash
+   pkill -f cloud-sql-proxy
+   ```
+
+**Option B: From your local machine**
 
 1. Install [Cloud SQL Auth Proxy](https://cloud.google.com/sql/docs/postgres/connect-auth-proxy).
-2. Start the proxy (use the same `INSTANCE_CONNECTION_NAME` and a free local port):
-
-   ```bash
-   cloud-sql-proxy "$INSTANCE_CONNECTION_NAME"
-   ```
-
-3. In another terminal, set `DATABASE_URL` to the proxy (e.g. `postgresql://ticket_concierge_app:PASSWORD@127.0.0.1:5432/ticket_concierge`) and run:
-
-   ```bash
-   npx prisma migrate deploy
-   ```
-
-**Option B: From a one-off Cloud Run Job or a GCE VM** that has Cloud SQL access and the same `DATABASE_URL` format (e.g. Unix socket or private IP). Run `npx prisma migrate deploy` there.
+2. Start the proxy: `cloud-sql-proxy --port=5432 INSTANCE_CONNECTION_NAME`
+3. In another terminal, set `DATABASE_URL=postgresql://USER:PASSWORD@127.0.0.1:5432/ticket_concierge` and run `npx prisma migrate deploy` and `npx prisma db seed` from the repo root.
 
 ---
 
@@ -282,6 +293,85 @@ If the main page loads but an event page (e.g. `/hamilton-dr-phillips-center`) s
 
 ---
 
+## Troubleshooting: “Invalid API key” or checkout returns 400
+
+If **Buy / checkout** fails with **Invalid API key** or **400** from `/api/checkout`:
+
+1. **Confirm Stripe secrets are on the Cloud Run service**
+   - In the console: **Cloud Run** → **ticket-concierge-web** → **Edit** → **Variables & secrets**.
+   - You should see **STRIPE_SECRET_KEY** and **STRIPE_WEBHOOK_SECRET** coming from Secret Manager (e.g. `STRIPE_SECRET_KEY = STRIPE_SECRET_KEY:latest`). If they’re missing, add them and redeploy.
+
+2. **Use the real secret key, not a placeholder**
+   - The value in Secret Manager for **STRIPE_SECRET_KEY** must be your real Stripe **secret** key: `sk_live_...` (production) or `sk_test_...` (test).
+   - It must not be the **publishable** key (`pk_live_...` / `pk_test_...`).
+   - No extra spaces, newlines, or quotes. Update the secret if needed:
+     ```bash
+     echo -n "sk_live_YourRealKeyHere" | gcloud secrets versions add STRIPE_SECRET_KEY --data-file=-
+     ```
+     Then deploy a new revision (or wait for the next deploy) so the service uses the new version.
+
+3. **Optional: set the publishable key as an env var**
+   - For Stripe.js or client-side use, set **NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY** as a **variable** (not a secret): e.g. `pk_live_...` or `pk_test_...`.
+   - In the deploy command, add:  
+     `--set-env-vars "...,NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_xxxx"`  
+     (or set it in the Cloud Run console under Variables & secrets).
+
+4. **Redeploy so the service sees the updated secrets**
+   - After changing a secret version or adding the env var, deploy a new revision (e.g. re-run your deploy command or push to trigger Cloud Build).
+
+---
+
+## Troubleshooting: “empty host in database URL”
+
+If logs show **empty host in database URL** or **Error parsing connection string**, the **DATABASE_URL** secret is wrong or incomplete.
+
+Prisma needs the **Unix socket path** in the URL. The value in Secret Manager must look exactly like this (one line, no spaces):
+
+```
+postgresql://USER:PASSWORD@/DATABASE?host=/cloudsql/CONNECTION_NAME
+```
+
+- **USER** = your Cloud SQL user (e.g. `ticket_concierge_app`)
+- **PASSWORD** = that user’s password (if it contains `@`, `#`, `:`, `/`, `%`, encode them; e.g. `@` → `%40`)
+- **DATABASE** = database name (e.g. `ticket_concierge`)
+- **CONNECTION_NAME** = `PROJECT_ID:REGION:INSTANCE_NAME` (e.g. `ticket-concierge-490215:us-central1:ticket-concierge-db`)
+
+**Example for project `ticket-concierge-490215`:**
+
+```
+postgresql://ticket_concierge_app:YOUR_PASSWORD@/ticket_concierge?host=/cloudsql/ticket-concierge-490215:us-central1:ticket-concierge-db
+```
+
+**Fix:**
+
+1. Get your instance connection name:
+   ```bash
+   gcloud sql instances describe ticket-concierge-db --format='value(connectionName)'
+   ```
+   (Use your actual instance name if different.)
+
+2. Create the URL (replace USER, PASSWORD, DATABASE, and CONNECTION_NAME):
+   ```bash
+   # Example – replace with your real values
+   export DB_USER=ticket_concierge_app
+   export DB_PASSWORD='your_password'
+   export DB_NAME=ticket_concierge
+   export INSTANCE_CONNECTION_NAME=ticket-concierge-490215:us-central1:ticket-concierge-db
+
+   export DATABASE_URL_VALUE="postgresql://${DB_USER}:${DB_PASSWORD}@/${DB_NAME}?host=/cloudsql/${INSTANCE_CONNECTION_NAME}"
+   echo "$DATABASE_URL_VALUE"
+   ```
+   Confirm the output is one line and includes `?host=/cloudsql/...`.
+
+3. Update the secret (creates a new version):
+   ```bash
+   echo -n "$DATABASE_URL_VALUE" | gcloud secrets versions add DATABASE_URL --data-file=-
+   ```
+
+4. Redeploy the Cloud Run service (or wait for the next deploy) so it picks up the new secret version. No need to change the service config; it already uses `DATABASE_URL:latest`.
+
+---
+
 ## Summary: variables used in this guide
 
 | Variable | Example / note |
@@ -307,3 +397,21 @@ After code or env changes:
 3. If the Prisma schema changed, run migrations again (Step 8).
 
 For CI/CD, use the repo’s `cloudbuild.yaml` and a Cloud Build trigger; configure the Cloud Run service’s env vars and secrets once in the console or via the same `gcloud run deploy` flags so each build only needs to deploy the new image.
+
+---
+
+## Redeploy command (project ticket-concierge-490215)
+
+Copy-paste to redeploy with the current image and env (Cloud Run URL and Cloud SQL connection name for this project):
+
+```bash
+gcloud run deploy ticket-concierge-web \
+  --image us-central1-docker.pkg.dev/ticket-concierge-490215/ticket-concierge/ticket-concierge-web:latest \
+  --region us-central1 \
+  --platform managed \
+  --allow-unauthenticated \
+  --service-account ticket-concierge-sa@ticket-concierge-490215.iam.gserviceaccount.com \
+  --add-cloudsql-instances ticket-concierge-490215:us-central1:ticket-concierge-db \
+  --set-env-vars "NODE_ENV=production,APP_BASE_URL=https://ticket-concierge-web-osbj5wpaga-uc.a.run.app,NEXTAUTH_URL=https://ticket-concierge-web-osbj5wpaga-uc.a.run.app,NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_51TAD6bPx1KdJH8yS6T49XZor5LIxmJPgtlR8Gn5ILvcas2kgBV1u2HOqCV9mEl5DVdFdH1GDdW1JlMWQ0JYL9rKo006sQJX3Sr" \
+  --set-secrets "DATABASE_URL=DATABASE_URL:latest,NEXTAUTH_SECRET=NEXTAUTH_SECRET:latest,STRIPE_SECRET_KEY=STRIPE_SECRET_KEY:latest,STRIPE_WEBHOOK_SECRET=STRIPE_WEBHOOK_SECRET:latest"
+```

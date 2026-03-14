@@ -2,6 +2,8 @@ import Link from 'next/link';
 import { prisma } from '@/lib/db';
 import { getServerSession } from '@/lib/auth';
 
+export const dynamic = 'force-dynamic';
+
 export default async function AdminOrdersPage() {
   const session = await getServerSession();
   if (!session?.user) {
