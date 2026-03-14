@@ -1,22 +1,41 @@
 import { notFound } from 'next/navigation';
-import { getParentEventPageData } from '../../../lib/events';
+import { getParentEventPageData } from '@/lib/events';
 import { EventPageClient } from './EventPageClient';
 
 type Props = { params: Promise<{ slug: string }> };
 
+function logServerError(context: string, err: unknown) {
+  const message = err instanceof Error ? err.message : String(err);
+  console.error(`[EventPage ${context}]`, message);
+  if (err instanceof Error && err.stack) {
+    console.error(err.stack);
+  }
+}
+
 export async function generateMetadata({ params }: Props) {
   const { slug } = await params;
-  const data = await getParentEventPageData(slug);
-  if (!data) return { title: 'Event not found' };
-  return {
-    title: `${data.title} | Ticket Concierge`,
-    description: data.eventDescription ?? `${data.title} at ${data.venueName}`
-  };
+  try {
+    const data = await getParentEventPageData(slug);
+    if (!data) return { title: 'Event not found' };
+    return {
+      title: `${data.title} | Ticket Concierge`,
+      description: data.eventDescription ?? `${data.title} at ${data.venueName}`
+    };
+  } catch (err) {
+    logServerError('generateMetadata', err);
+    return { title: 'Event not found' };
+  }
 }
 
 export default async function PublicEventPage({ params }: Props) {
   const { slug } = await params;
-  const data = await getParentEventPageData(slug);
+  let data: Awaited<ReturnType<typeof getParentEventPageData>>;
+  try {
+    data = await getParentEventPageData(slug);
+  } catch (err) {
+    logServerError('getParentEventPageData', err);
+    throw err;
+  }
 
   if (!data) notFound();
 

@@ -116,6 +116,14 @@ Substitutions in `cloudbuild.yaml` (override in the trigger if needed):
 
 ---
 
+## Step-by-step deployment (project: ticket-concierge)
+
+For **detailed, copy-paste instructions** (APIs, Cloud SQL, secrets, service account, build, deploy, migrations) see:
+
+- **[docs/deploy-cloud-run.md](docs/deploy-cloud-run.md)** — project-specific guide for Google Cloud project **ticket-concierge**.
+
+---
+
 ## What to configure in Google Cloud
 
 1. **Project**: Create or select a GCP project; enable billing if needed.
