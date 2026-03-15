@@ -1,5 +1,7 @@
+import type { CSSProperties } from 'react';
 import { notFound } from 'next/navigation';
 import { getParentEventPageData } from '@/lib/events';
+import { resolveEventTheme } from '@/lib/theme';
 import { EventPageClient } from './EventPageClient';
 
 type Props = { params: Promise<{ slug: string }> };
@@ -43,12 +45,29 @@ export default async function PublicEventPage({ params }: Props) {
   const defaultSelectedDateId =
     validDates.length === 1 ? validDates[0].id : validDates[0]?.id ?? null;
 
+  const theme = resolveEventTheme({
+    primaryColor: data.primaryColor,
+    secondaryColor: data.secondaryColor,
+    accentColor: data.accentColor
+  });
+
+  const themeStyle = {
+    '--event-primary': theme.primary,
+    '--event-secondary': theme.secondary,
+    '--event-accent': theme.accent,
+    '--event-bg': theme.background,
+    '--event-button': theme.button
+  } as CSSProperties;
+
   return (
-    <article className="space-y-8">
+    <article
+      className="space-y-8 event-theme"
+      style={themeStyle}
+    >
       {/* Hero */}
       <header className="space-y-4">
         {data.heroImageUrl && (
-          <div className="aspect-[21/9] w-full overflow-hidden rounded-lg border border-slate-700 bg-slate-900">
+          <div className="aspect-[21/9] w-full overflow-hidden rounded-lg border border-[var(--event-secondary)] bg-[var(--event-primary)]">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={data.heroImageUrl}
@@ -77,7 +96,11 @@ export default async function PublicEventPage({ params }: Props) {
         )}
       </header>
 
-      <EventPageClient data={data} defaultSelectedDateId={defaultSelectedDateId} />
+      <EventPageClient
+        data={data}
+        defaultSelectedDateId={defaultSelectedDateId}
+        theme={theme}
+      />
     </article>
   );
 }

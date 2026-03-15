@@ -21,6 +21,12 @@ export function getStripeWebhookSecret(): string {
   return secret;
 }
 
+export type StripeBrandingInput = {
+  displayName?: string;
+  backgroundColor: string;
+  buttonColor: string;
+};
+
 export type CreateCheckoutSessionInput = {
   amountTotalCents: number;
   perTicketAmountCents: number;
@@ -35,12 +41,14 @@ export type CreateCheckoutSessionInput = {
   successUrl: string;
   cancelUrl: string;
   metadata: Record<string, string>;
+  /** Optional branding so Checkout matches event look and feel */
+  branding?: StripeBrandingInput;
 };
 
 export async function createCheckoutSession(input: CreateCheckoutSessionInput) {
   const stripe = getStripeClient();
 
-  const session = await stripe.checkout.sessions.create({
+  const sessionParams: Stripe.Checkout.SessionCreateParams = {
     mode: 'payment',
     success_url: input.successUrl,
     cancel_url: input.cancelUrl,
@@ -64,7 +72,19 @@ export async function createCheckoutSession(input: CreateCheckoutSessionInput) {
       customerPhone: input.customerPhone ?? '',
       ...input.metadata
     }
-  });
+  };
+
+  if (input.branding) {
+    sessionParams.branding_settings = {
+      ...(input.branding.displayName
+        ? { display_name: input.branding.displayName }
+        : {}),
+      background_color: input.branding.backgroundColor,
+      button_color: input.branding.buttonColor
+    };
+  }
+
+  const session = await stripe.checkout.sessions.create(sessionParams);
 
   return session;
 }

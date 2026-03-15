@@ -44,6 +44,11 @@ export async function POST(request: Request) {
       customerPhone,
       successUrl: `${appBaseUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
       cancelUrl: `${appBaseUrl}/checkout/cancel`,
+      branding: {
+        displayName: quote.eventTitle,
+        backgroundColor: quote.theme.background,
+        buttonColor: quote.theme.button
+      },
       metadata: {
         parentEventId: quote.parentEventId,
         eventDateId,

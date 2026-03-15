@@ -1,10 +1,12 @@
 'use client';
 
+import { useRef } from 'react';
 import { useFormState } from 'react-dom';
 import Link from 'next/link';
 import { updateParentEvent } from '@/lib/actions/admin-events';
 import { AdminFormField, AdminFormTextarea, AdminFormSelect, AdminFormCheckbox } from '@/admin-components/AdminFormField';
 import { FormError } from '@/admin-components/FormError';
+import { PRESET_THEMES, type PresetThemeId } from '@/lib/theme';
 
 export type EditableParentEvent = {
   id: string;
@@ -32,15 +34,71 @@ export type EditableParentEvent = {
   isActive: boolean;
 };
 
+const PRESET_OPTIONS: { value: PresetThemeId; label: string }[] = [
+  { value: 'dark_gold', label: 'Dark & Gold' },
+  { value: 'navy_white', label: 'Navy & White' },
+  { value: 'burgundy', label: 'Burgundy' },
+  { value: 'slate', label: 'Slate' }
+];
+
 export function ParentEventEditForm({ event }: { event: EditableParentEvent }) {
+  const formRef = useRef<HTMLFormElement>(null);
   const [state, formAction] = useFormState(
     (prev: { error: string | null } | null, fd: FormData) => updateParentEvent(event.id, prev, fd),
     { error: null }
   );
 
+  function applyPreset(presetId: PresetThemeId) {
+    const form = formRef.current;
+    if (!form) return;
+    const preset = PRESET_THEMES[presetId];
+    const set = (name: string, value: string) => {
+      const input = form.querySelector<HTMLInputElement>(`[name="${name}"]`);
+      if (input) input.value = value;
+    };
+    set('primaryColor', preset.primary);
+    set('secondaryColor', preset.secondary);
+    set('accentColor', preset.accent);
+  }
+
   return (
-    <form action={formAction} className="max-w-2xl space-y-4">
+    <form ref={formRef} action={formAction} className="max-w-2xl space-y-4">
       <FormError message={state?.error} />
+
+      {/* Theme / color palette — first so it's easy to find; event page + Stripe Checkout */}
+      <div className="rounded-lg border-2 border-amber-600/50 bg-slate-800/70 p-4">
+        <h3 className="mb-1 text-base font-semibold text-amber-200">
+          Event theme &amp; colors
+        </h3>
+        <p className="mb-3 text-xs text-slate-400">
+          Choose a preset or edit hex values below. Used on the public event page and Stripe Checkout.
+        </p>
+        <div className="mb-3">
+          <label htmlFor="theme-preset" className="mb-1 block text-sm font-medium text-white">
+            Preset color palette
+          </label>
+          <select
+            id="theme-preset"
+            className="w-full max-w-sm rounded border border-slate-500 bg-slate-700 px-3 py-2 text-sm font-medium text-white focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+            defaultValue=""
+            onChange={(e) => {
+              const v = e.target.value as PresetThemeId | '';
+              if (v && v in PRESET_THEMES) applyPreset(v);
+            }}
+          >
+            <option value="">— Choose a preset —</option>
+            {PRESET_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <AdminFormField name="primaryColor" label="Primary color" defaultValue={event.primaryColor ?? ''} placeholder="#0f172a" />
+          <AdminFormField name="secondaryColor" label="Secondary color" defaultValue={event.secondaryColor ?? ''} placeholder="#1e293b" />
+          <AdminFormField name="accentColor" label="Accent color" defaultValue={event.accentColor ?? ''} placeholder="#d4af37" />
+        </div>
+      </div>
+
       <AdminFormField name="title" label="Title" required defaultValue={event.title} />
       <AdminFormField name="slug" label="Slug (URL)" required defaultValue={event.slug} />
       <AdminFormField name="venueName" label="Venue name" required defaultValue={event.venueName} />
@@ -49,9 +107,6 @@ export function ParentEventEditForm({ event }: { event: EditableParentEvent }) {
       <AdminFormField name="subheadline" label="Subheadline" defaultValue={event.subheadline ?? ''} />
       <AdminFormTextarea name="eventDescription" label="Event description" defaultValue={event.eventDescription ?? ''} />
       <AdminFormField name="layoutTemplate" label="Layout template" required defaultValue={event.layoutTemplate} />
-      <AdminFormField name="primaryColor" label="Primary color" defaultValue={event.primaryColor ?? ''} />
-      <AdminFormField name="secondaryColor" label="Secondary color" defaultValue={event.secondaryColor ?? ''} />
-      <AdminFormField name="accentColor" label="Accent color" defaultValue={event.accentColor ?? ''} />
       <AdminFormField name="textTheme" label="Text theme" defaultValue={event.textTheme ?? ''} />
       <AdminFormField name="heroImageUrl" label="Hero image URL" defaultValue={event.heroImageUrl ?? ''} />
       <AdminFormField name="mobileHeroImageUrl" label="Mobile hero image URL" defaultValue={event.mobileHeroImageUrl ?? ''} />

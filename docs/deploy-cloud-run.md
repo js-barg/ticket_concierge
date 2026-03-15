@@ -264,12 +264,52 @@ The app does **not** run migrations automatically. If you see **The table `publi
 
 ## Step 9: Stripe webhook (production)
 
-In the Stripe Dashboard, add a webhook endpoint for your production URL:
+In the Stripe Dashboard, add a webhook endpoint for your **production** URL:
 
-- URL: `https://YOUR_CLOUD_RUN_URL/api/stripe/webhook`
-- Events: `checkout.session.completed` (and any others you use)
+- **URL:** `https://ticket-concierge-web-osbj5wpaga-uc.a.run.app/api/stripe/webhook`
+- **Events:** `checkout.session.completed` (and any others you use)
 
-Set the signing secret in Secret Manager as `STRIPE_WEBHOOK_SECRET` (you did this in Step 4) and redeploy if you had already deployed before creating the secret.
+Set the signing secret in Secret Manager as `STRIPE_WEBHOOK_SECRET` (you did this in Step 4). Use the **production** webhook’s signing secret in production; do not use the Stripe CLI (local) secret for the Cloud Run service.
+
+**Important:** The webhook must run in the **same environment as the checkout**. If the customer pays on the live site (Cloud Run), Stripe must send the webhook to the Cloud Run URL above. If the webhook is sent to localhost (e.g. via Stripe CLI), the app will look up event/zone IDs in the local database and fail with “Event date or parent event not found” because those IDs exist only in the production DB.
+
+---
+
+## Fix: Production webhook (orders not created after payment)
+
+If payment succeeds but the order never appears and logs show **Event date or parent event not found**, the webhook is hitting the wrong environment. Do this:
+
+**1. Add the production webhook in Stripe**
+
+- Go to [Stripe Dashboard → Developers → Webhooks](https://dashboard.stripe.com/webhooks).
+- Click **Add endpoint**.
+- **Endpoint URL:** `https://ticket-concierge-web-osbj5wpaga-uc.a.run.app/api/stripe/webhook`
+- **Events to send:** select `checkout.session.completed`.
+- Click **Add endpoint**.
+
+**2. Copy the signing secret**
+
+- Open the new endpoint → **Reveal** under “Signing secret”.
+- Copy the value (starts with `whsec_`).
+
+**3. Put the secret in Google Cloud**
+
+Create or update the Secret Manager secret so Cloud Run can use it:
+
+```bash
+# Replace with the signing secret from step 2
+echo -n "whsec_YourProductionWebhookSigningSecret" | gcloud secrets versions add STRIPE_WEBHOOK_SECRET --data-file=-
+```
+
+If the secret doesn’t exist yet:
+
+```bash
+echo -n "whsec_YourProductionWebhookSigningSecret" | gcloud secrets create STRIPE_WEBHOOK_SECRET --data-file=- --replication-policy=automatic
+```
+
+**4. Redeploy Cloud Run**
+
+Redeploy so the service loads the new secret version (use the [Redeploy command](#redeploy-command-project-ticket-concierge-490215) from this doc). New payments on the live site will then create orders in production.
 
 ---
 

@@ -1,7 +1,7 @@
-import { Prisma } from '@prisma/client';
 import { prisma } from './db';
 import { calculatePricing, type PricingBreakdown } from './pricing';
 import { validateQuantity } from './quantity';
+import { resolveEventTheme } from './theme';
 
 export type QuoteRequest = {
   eventDateId: string;
@@ -21,6 +21,14 @@ export type QuoteResult = {
   seatsTogetherExpected: boolean;
   pricing: PricingBreakdown & {
     perTicketPublicPrice: number;
+  };
+  /** Theme for UI and Stripe Checkout branding */
+  theme: {
+    primary: string;
+    secondary: string;
+    accent: string;
+    background: string;
+    button: string;
   };
 };
 
@@ -87,6 +95,12 @@ export async function generateQuote(req: QuoteRequest): Promise<QuoteResult> {
       parent.defaultServiceFeeValue != null ? Number(parent.defaultServiceFeeValue) : null
   });
 
+  const theme = resolveEventTheme({
+    primaryColor: parent.primaryColor,
+    secondaryColor: parent.secondaryColor,
+    accentColor: parent.accentColor
+  });
+
   return {
     parentEventId: parent.id,
     eventTitle: parent.title,
@@ -97,7 +111,8 @@ export async function generateQuote(req: QuoteRequest): Promise<QuoteResult> {
     quantity,
     fulfillmentType: zone.fulfillmentType,
     seatsTogetherExpected: quantity > 1,
-    pricing
+    pricing,
+    theme
   };
 }
 

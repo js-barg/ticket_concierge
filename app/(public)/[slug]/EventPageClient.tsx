@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import type { ParentEventPageData, ValidEventDate, ZoneOption } from '../../../lib/events';
+import type { ResolvedTheme } from '@/lib/theme';
 
 function formatPerformanceAt(iso: string, tz: string): string {
   const d = new Date(iso);
@@ -22,10 +23,12 @@ function formatPerformanceAt(iso: string, tz: string): string {
 
 export function EventPageClient({
   data,
-  defaultSelectedDateId
+  defaultSelectedDateId,
+  theme
 }: {
   data: ParentEventPageData;
   defaultSelectedDateId: string | null;
+  theme: ResolvedTheme;
 }) {
   const [selectedDateId, setSelectedDateId] = useState<string | null>(defaultSelectedDateId);
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
@@ -181,8 +184,8 @@ export function EventPageClient({
               onClick={() => setSelectedDateId(d.id)}
               className={`rounded-lg border px-4 py-2 text-left text-sm transition-colors ${
                 selectedDateId === d.id
-                  ? 'border-slate-500 bg-slate-700 text-white'
-                  : 'border-slate-700 bg-slate-800/80 text-slate-300 hover:bg-slate-700/80'
+                  ? 'border-[var(--event-accent)] bg-[var(--event-secondary)] text-white'
+                  : 'border-[var(--event-secondary)] bg-[var(--event-primary)]/80 text-slate-300 hover:bg-[var(--event-secondary)]/80'
               }`}
             >
               {formatPerformanceAt(d.performanceAt, d.timezone)}
@@ -197,7 +200,7 @@ export function EventPageClient({
           <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-slate-400">
             Seating map
           </h2>
-          <div className="overflow-hidden rounded-lg border border-slate-700 bg-slate-900">
+          <div className="overflow-hidden rounded-lg border border-[var(--event-secondary)] bg-[var(--event-primary)]">
             {seatingMapError ? (
               <div className="flex min-h-[120px] items-center justify-center px-4 py-8 text-center">
                 <p className="text-sm text-slate-500">Seating map image unavailable</p>
@@ -224,10 +227,10 @@ export function EventPageClient({
           {selectedDate?.zones.map((z) => (
             <div
               key={z.id}
-              className={`flex flex-col gap-1 rounded-lg border p-4 ${
+              className={`flex flex-col gap-1 rounded-lg border p-4 transition-colors ${
                 selectedZoneId === z.id
-                  ? 'border-slate-400 bg-slate-700'
-                  : 'border-slate-700 bg-slate-800/50 hover:bg-slate-800'
+                  ? 'border-[var(--event-accent)] bg-[var(--event-secondary)]'
+                  : 'border-[var(--event-secondary)] bg-[var(--event-primary)]/50 hover:bg-[var(--event-secondary)]/30'
               }`}
               onClick={() => setSelectedZoneId(z.id)}
             >
@@ -260,7 +263,7 @@ export function EventPageClient({
 
       {/* Quote and checkout */}
       {selectedDate && selectedZoneId && (
-        <section className="space-y-4 rounded-lg border border-slate-700 bg-slate-800/40 p-4">
+        <section className="space-y-4 rounded-lg border border-[var(--event-secondary)] bg-[var(--event-primary)]/60 p-4">
           <h2 className="text-sm font-medium uppercase tracking-wide text-slate-400">
             Your selection
           </h2>
@@ -279,7 +282,7 @@ export function EventPageClient({
                   min={1}
                   value={quantity}
                   onChange={(e) => setQuantity(Math.max(1, Number(e.target.value) || 1))}
-                  className="w-24 rounded border border-slate-600 bg-slate-900 px-2 py-1 text-sm text-white focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+                  className="w-24 rounded border border-[var(--event-secondary)] bg-[var(--event-primary)] px-2 py-1 text-sm text-white focus:border-[var(--event-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--event-accent)]"
                 />
               </div>
               <div className="space-y-2">
@@ -288,19 +291,19 @@ export function EventPageClient({
                   id="checkout-name"
                   type="text"
                   placeholder="Full name"
-                  className="w-full rounded border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+                  className="w-full rounded border border-[var(--event-secondary)] bg-[var(--event-primary)] px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-[var(--event-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--event-accent)]"
                 />
                 <input
                   id="checkout-email"
                   type="email"
                   placeholder="Email"
-                  className="w-full rounded border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+                  className="w-full rounded border border-[var(--event-secondary)] bg-[var(--event-primary)] px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-[var(--event-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--event-accent)]"
                 />
                 <input
                   id="checkout-phone"
                   type="tel"
                   placeholder="Phone (optional)"
-                  className="w-full rounded border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+                  className="w-full rounded border border-[var(--event-secondary)] bg-[var(--event-primary)] px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-[var(--event-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--event-accent)]"
                 />
               </div>
             </div>
@@ -319,7 +322,7 @@ export function EventPageClient({
                     <span>Service fees</span>
                     <span>${quote.serviceFee.toFixed(2)}</span>
                   </div>
-                  <div className="flex justify-between border-t border-slate-700 pt-2 text-slate-100">
+                  <div className="flex justify-between border-t border-[var(--event-secondary)] pt-2 text-slate-100">
                     <span>Total</span>
                     <span className="font-semibold">${quote.total.toFixed(2)}</span>
                   </div>
@@ -336,7 +339,8 @@ export function EventPageClient({
                 type="button"
                 disabled={!quote || quoteLoading}
                 onClick={handleCheckout}
-                className="mt-3 inline-flex w-full items-center justify-center rounded bg-slate-50 px-4 py-2 text-sm font-medium text-slate-900 hover:bg-white disabled:opacity-60"
+                className="mt-3 inline-flex w-full items-center justify-center rounded px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+                style={{ backgroundColor: theme.button }}
               >
                 {quoteLoading ? 'Processing…' : 'Continue to checkout'}
               </button>
@@ -347,7 +351,7 @@ export function EventPageClient({
 
       {/* Disclosure */}
       {data.disclosureBlock && (
-        <section className="rounded-lg border border-slate-700 bg-slate-800/30 p-4">
+        <section className="rounded-lg border border-[var(--event-secondary)] bg-[var(--event-primary)]/40 p-4">
           <h2 className="mb-2 text-sm font-medium uppercase tracking-wide text-slate-400">
             Important information
           </h2>

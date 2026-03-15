@@ -58,11 +58,22 @@ export async function createOrderFromCheckoutSession(
     include: { parentEvent: true }
   });
   if (!eventDate || !eventDate.parentEvent) {
-    throw new Error('Event date or parent event not found when creating order.');
+    console.error(
+      '[createOrderFromCheckoutSession] Event date or parent not found. Metadata:',
+      { eventDateId, parentEventId, zoneId, sessionId: session.id }
+    );
+    throw new Error(
+      `Event date or parent event not found when creating order. eventDateId=${eventDateId}. ` +
+        'If the checkout was on a different environment (e.g. production vs local), the webhook must run against that environment’s database.'
+    );
   }
 
   const zone = await prisma.zone.findUnique({ where: { id: zoneId } });
   if (!zone) {
+    console.error(
+      '[createOrderFromCheckoutSession] Zone not found. Metadata:',
+      { zoneId, eventDateId, sessionId: session.id }
+    );
     throw new Error('Zone not found when creating order.');
   }
 
